@@ -68,7 +68,7 @@ export function PublicProjectDetail({ workId, onNavigate }: PublicProjectDetailP
           Project Record Not Found
         </h2>
         <p className="text-xs text-[#44474f]">
-          {error || `Project ${workId} was not found in the official Lok Sabha public dataset.`}
+          {error || `Project ${workId} was not found in the official public dataset.`}
         </p>
         <button
           onClick={() => onNavigate('/projects')}
@@ -132,12 +132,24 @@ export function PublicProjectDetail({ workId, onNavigate }: PublicProjectDetailP
         </h1>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-[#44474f] pt-1 border-t border-[#E9ECEF]">
-          <div className="flex items-center gap-1">
-            <MapPin size={13} className="text-[#005eb2]" />
-            <span className="font-semibold text-[#000a1f]">{data.constituency}</span>
-            <span>({data.state})</span>
-          </div>
-          <span>•</span>
+          {data.constituency ? (
+            <>
+              <div className="flex items-center gap-1">
+                <MapPin size={13} className="text-[#005eb2]" />
+                <span className="font-semibold text-[#000a1f]">{data.constituency}</span>
+                <span>({data.state})</span>
+              </div>
+              <span>•</span>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1">
+                <MapPin size={13} className="text-[#005eb2]" />
+                <span className="font-semibold text-[#000a1f]">{data.state}</span>
+              </div>
+              <span>•</span>
+            </>
+          )}
           <div>
             <span className="text-[#747780]">District: </span>
             <span className="font-medium text-[#141d23]">{data.district}</span>

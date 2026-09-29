@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { CANONICAL_RAJYA_SABHA_MPS } from '../data/canonicalRajyaSabhaMps.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,19 +201,113 @@ function toPublicAttentionIndicator(riskScore: number, riskLevel?: string, riskE
 
 export class PublicService {
   /**
-   * 1. Public MP Directory: Get 543 real Lok Sabha MPs with server-side pagination & filtering
+   * 1. Public MP Directory: Real Lok Sabha or Rajya Sabha MPs with server-side pagination & filtering
    */
   static async getMps(params: {
     search?: string;
     state?: string;
     constituency?: string;
+    house?: string;
     page?: number;
     pageSize?: number;
   }) {
+    const isRajyaSabha = params.house?.toLowerCase().includes('rajya') ?? false;
     const page = Math.max(1, Number(params.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 24));
     const offset = (page - 1) * pageSize;
 
+    if (isRajyaSabha) {
+      let query = supabase
+        .from('profiles')
+        .select('id, mp_id, full_name, mp_name, state, house, photo_url')
+        .eq('role', 'MP')
+        .eq('house', 'Rajya Sabha');
+
+      if (params.state && params.state !== 'ALL') {
+        query = query.eq('state', params.state);
+      }
+      if (params.search) {
+        const s = params.search.trim();
+        query = query.or(`mp_name.ilike.%${s}%,full_name.ilike.%${s}%,state.ilike.%${s}%`);
+      }
+
+      const { data: dbRows, error } = await query;
+      if (error) {
+        throw new Error(`Failed to load Rajya Sabha MP directory: ${error.message}`);
+      }
+
+      // Merge database profiles with canonical dataset-derived Rajya Sabha MP identities
+      const mpMap = new Map<string, any>();
+      for (const row of dbRows || []) {
+        const normKey = (row.mp_name || row.full_name || '')
+          .replace(/\s*\(\d{4}-\d{2,4}\)/g, '')
+          .replace(/^(hon'ble\s+mp|mp|shri|smt\.|smt|dr\.|dr)\s+/i, '')
+          .toLowerCase()
+          .trim();
+
+        mpMap.set(normKey, {
+          id: row.id,
+          mpId: row.mp_id || `rs_${row.id}`,
+          name: row.mp_name || row.full_name?.replace(/^hon'ble\s+mp\s+/i, '').trim(),
+          fullName: row.full_name,
+          party: 'Not specified',
+          constituency: undefined,
+          state: row.state || 'State',
+          house: 'Rajya Sabha',
+          photoUrl: row.photo_url || null,
+        });
+      }
+
+      for (const c of CANONICAL_RAJYA_SABHA_MPS) {
+        const normKey = c.mp_name
+          .replace(/\s*\(\d{4}-\d{2,4}\)/g, '')
+          .replace(/^(hon'ble\s+mp|mp|shri|smt\.|smt|dr\.|dr)\s+/i, '')
+          .toLowerCase()
+          .trim();
+
+        if (!mpMap.has(normKey)) {
+          if (params.state && params.state !== 'ALL' && c.state.toLowerCase() !== params.state.toLowerCase()) {
+            continue;
+          }
+          if (params.search) {
+            const s = params.search.toLowerCase();
+            if (!c.mp_name.toLowerCase().includes(s) && !c.state.toLowerCase().includes(s)) {
+              continue;
+            }
+          }
+          mpMap.set(normKey, {
+            id: c.id,
+            mpId: c.mp_id,
+            name: c.mp_name.replace(/^hon'ble\s+mp\s+/i, '').trim(),
+            fullName: c.full_name,
+            party: 'Not specified',
+            constituency: undefined,
+            state: c.state || 'State',
+            house: 'Rajya Sabha',
+            photoUrl: c.photo_url || null,
+          });
+        }
+      }
+
+      const allRS = Array.from(mpMap.values()).sort((a, b) => {
+        const stateComp = (a.state || '').localeCompare(b.state || '');
+        if (stateComp !== 0) return stateComp;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+      const totalCount = allRS.length;
+      const mps = allRS.slice(offset, offset + pageSize);
+
+      return {
+        mps,
+        totalCount,
+        page,
+        pageSize,
+        totalPages: Math.ceil(totalCount / pageSize),
+      };
+    }
+
+    // Default: Lok Sabha MP directory (543 seats)
     let query = supabase
       .from('profiles')
       .select('id, mp_id, full_name, mp_name, constituency, state, house, photo_url', { count: 'exact' })
@@ -243,7 +338,7 @@ export class PublicService {
       mpId: row.mp_id || `ls_${row.id}`,
       name: row.mp_name || row.full_name?.replace(/^hon'ble\s+mp\s+/i, '').trim(),
       fullName: row.full_name,
-      party: 'Not specified', // Dataset does not record party affiliation
+      party: 'Not specified',
       constituency: row.constituency || 'Constituency',
       state: row.state || 'State',
       house: 'Lok Sabha',
@@ -260,61 +355,111 @@ export class PublicService {
   }
 
   /**
-   * 2. Public MP Profile: Comprehensive public-safe dossier for an MP
+   * 2. Public MP Profile: Comprehensive public-safe dossier for an MP (Lok Sabha or Rajya Sabha)
    */
-  static async getMpProfile(mpIdentifier: string) {
-    // 1. Locate MP profile
+  static async getMpProfile(mpIdentifier: string, params: { house?: string } = {}) {
+    const isExplicitRS = params.house?.toLowerCase().includes('rajya') || mpIdentifier.startsWith('rs_');
+
+    // 1. Locate MP profile in database
     let profileQuery = supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'MP')
-      .eq('house', 'Lok Sabha');
+      .eq('role', 'MP');
 
-    // Test UUID or mp_id or slug match
-    if (mpIdentifier.startsWith('ls_')) {
+    if (isExplicitRS) {
+      profileQuery = profileQuery.eq('house', 'Rajya Sabha');
+    } else if (params.house?.toLowerCase().includes('lok') || mpIdentifier.startsWith('ls_')) {
+      profileQuery = profileQuery.eq('house', 'Lok Sabha');
+    }
+
+    if (mpIdentifier.startsWith('ls_') || mpIdentifier.startsWith('rs_')) {
       profileQuery = profileQuery.eq('mp_id', mpIdentifier);
     } else {
       profileQuery = profileQuery.or(`id.eq.${mpIdentifier},mp_id.eq.${mpIdentifier}`);
     }
 
     const { data: profileRows } = await profileQuery.limit(1);
-    const profile = profileRows && profileRows.length > 0 ? profileRows[0] : null;
+    let profile = profileRows && profileRows.length > 0 ? profileRows[0] : null;
 
+    // 2. Check canonical dataset-driven Rajya Sabha profiles
     if (!profile) {
-      // Fallback search by constituency slug or name
-      const cleanSlug = mpIdentifier.replace(/^ls_/, '').replace(/_/g, ' ');
-      const { data: fallbackRows } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'MP')
-        .eq('house', 'Lok Sabha')
-        .ilike('constituency', `%${cleanSlug}%`)
-        .limit(1);
+      const canonicalMatch = CANONICAL_RAJYA_SABHA_MPS.find(
+        m => m.mp_id === mpIdentifier || m.id === mpIdentifier || m.mp_name.toLowerCase().includes(mpIdentifier.toLowerCase())
+      );
+      if (canonicalMatch) {
+        profile = {
+          ...canonicalMatch,
+          role: 'MP',
+        };
+      }
+    }
 
-      if (!fallbackRows || fallbackRows.length === 0) {
+    // 3. Fallback search by slug or name
+    if (!profile) {
+      const cleanSlug = mpIdentifier.replace(/^(ls|rs)_/, '').replace(/_/g, ' ');
+
+      if (!isExplicitRS) {
+        const { data: fallbackRows } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('role', 'MP')
+          .eq('house', 'Lok Sabha')
+          .ilike('constituency', `%${cleanSlug}%`)
+          .limit(1);
+
+        if (fallbackRows && fallbackRows.length > 0) {
+          profile = fallbackRows[0];
+        }
+      }
+
+      if (!profile) {
+        const { data: rsFallback } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('role', 'MP')
+          .eq('house', 'Rajya Sabha')
+          .ilike('mp_name', `%${cleanSlug}%`)
+          .limit(1);
+
+        if (rsFallback && rsFallback.length > 0) {
+          profile = rsFallback[0];
+        }
+      }
+
+      if (!profile) {
         throw new Error(`MP profile not found for identifier: ${mpIdentifier}`);
       }
-      return PublicService.buildProfileData(fallbackRows[0]);
     }
 
     return PublicService.buildProfileData(profile);
   }
 
   private static async buildProfileData(profile: any) {
+    const isRajyaSabha = profile.house === 'Rajya Sabha';
     const mpName = profile.mp_name || profile.full_name?.replace(/^hon'ble\s+mp\s+/i, '').trim();
+    const cleanMpName = mpName?.replace(/\s*\(\d{4}-\d{2,4}\)/g, '').trim();
     const constituency = profile.constituency;
 
-    // Fetch projects for this MP from Lok Sabha dataset
+    const targetTable = isRajyaSabha ? 'rajya_sabha_projects' : 'lok_sabha_projects';
+
+    const projectColumns = 'work_id, work_description, work_category, financial_year, sanction_amount, amount_disbursed, total_paid, work_status, is_completed, is_recommended_only, district, state, risk_score, risk_level, risk_explanation, sanction_date';
+
+    // Fetch projects for this MP from strictly house-scoped dataset
     let query = supabase
-      .from('lok_sabha_projects')
-      .select('*')
-      .order('sanction_date', { ascending: false, nullsFirst: false });
+      .from(targetTable)
+      .select(projectColumns);
 
     if (mpName) {
-      query = query.ilike('mp_name', `%${mpName}%`);
-    } else if (constituency) {
+      if (isRajyaSabha) {
+        query = query.ilike('mp_name', `%${cleanMpName}%`);
+      } else {
+        query = query.ilike('mp_name', `%${mpName}%`);
+      }
+    } else if (constituency && !isRajyaSabha) {
       query = query.eq('constituency', constituency);
     }
+
+    query = query.limit(1000);
 
     const { data: rows, error } = await query;
     if (error) {
@@ -343,10 +488,10 @@ export class PublicService {
     }
     const categoryBreakdown = Array.from(categoryMap.values()).sort((a, b) => b.sanctioned - a.sanctioned);
 
-    // Districts
+    // Districts / Regional Locations
     const districtMap = new Map<string, { district: string; count: number; sanctioned: number; disbursed: number; completed: number }>();
     for (const p of projects) {
-      const dist = p.district ? p.district.split('(')[0].trim() : (profile.state || 'Constituency Area');
+      const dist = p.district ? p.district.split('(')[0].trim() : (profile.state || 'State Area');
       const entry = districtMap.get(dist) || { district: dist, count: 0, sanctioned: 0, disbursed: 0, completed: 0 };
       entry.count += 1;
       entry.sanctioned += (Number(p.sanction_amount) || 0);
@@ -393,17 +538,23 @@ export class PublicService {
     });
     const financialYears = Array.from(fySet).sort().reverse();
 
+    // Derived tenure
+    const tenureMatch = mpName?.match(/\(\d{4}-\d{2,4}\)/)?.[0]?.replace(/[()]/g, '');
+    const derivedTenure = isRajyaSabha
+      ? (tenureMatch || (financialYears.length > 0 ? financialYears.join(', ') : 'Council of States'))
+      : (financialYears.length > 0 ? financialYears.join(', ') : '18th Lok Sabha');
+
     return {
       mpInfo: {
         fullName: profile.full_name,
         mpName,
         party: 'Not specified',
-        constituency: profile.constituency || 'Constituency',
+        constituency: isRajyaSabha ? undefined : (profile.constituency || 'Constituency'),
         state: profile.state || 'State',
-        house: 'Lok Sabha',
-        mpId: profile.mp_id || `ls_${profile.id}`,
+        house: isRajyaSabha ? 'Rajya Sabha' : 'Lok Sabha',
+        mpId: profile.mp_id || `${isRajyaSabha ? 'rs' : 'ls'}_${profile.id}`,
         photoUrl: profile.photo_url || null,
-        tenure: financialYears.length > 0 ? financialYears.join(', ') : '18th Lok Sabha',
+        tenure: derivedTenure,
       },
       portfolioSummary: {
         totalWorks,
@@ -423,11 +574,12 @@ export class PublicService {
   }
 
   /**
-   * 3. Public Project Explorer: Server-side paginated projects with public-safe fields
+   * 3. Public Project Explorer: Server-side paginated projects for Lok Sabha or Rajya Sabha
    */
   static async getProjects(params: {
     page?: number;
     pageSize?: number;
+    house?: string;
     state?: string;
     district?: string;
     constituency?: string;
@@ -439,12 +591,15 @@ export class PublicService {
     sortBy?: string;
     sortOrder?: string;
   }) {
+    const isRajyaSabha = params.house?.toLowerCase().includes('rajya') ?? false;
+    const targetTable = isRajyaSabha ? 'rajya_sabha_projects' : 'lok_sabha_projects';
+
     const page = Math.max(1, Number(params.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 20));
     const offset = (page - 1) * pageSize;
 
     let query = supabase
-      .from('lok_sabha_projects')
+      .from(targetTable)
       .select(
         'work_id, work_description, house, state, district, constituency, mp_name, work_category, financial_year, sanction_amount, amount_disbursed, total_paid, work_status, is_completed, is_sanctioned, is_recommended_only, sanction_date, completion_date, risk_score, risk_level',
         { count: 'exact' }
@@ -456,14 +611,14 @@ export class PublicService {
     if (params.district && params.district !== 'ALL') {
       query = query.ilike('district', `%${params.district}%`);
     }
-    if (params.constituency && params.constituency !== 'ALL') {
+    if (!isRajyaSabha && params.constituency && params.constituency !== 'ALL') {
       query = query.ilike('constituency', `%${params.constituency}%`);
     }
     if (params.mpName && params.mpName !== 'ALL') {
       query = query.ilike('mp_name', `%${params.mpName}%`);
     }
     if (params.category && params.category !== 'ALL') {
-      query = query.eq('work_category', params.category);
+      query = query.ilike('work_category', `%${params.category}%`);
     }
     if (params.financialYear && params.financialYear !== 'ALL') {
       query = query.eq('financial_year', params.financialYear);
@@ -476,7 +631,11 @@ export class PublicService {
     }
     if (params.search) {
       const s = params.search.trim();
-      query = query.or(`work_id.ilike.%${s}%,work_description.ilike.%${s}%,constituency.ilike.%${s}%,mp_name.ilike.%${s}%`);
+      if (isRajyaSabha) {
+        query = query.or(`work_id.ilike.%${s}%,work_description.ilike.%${s}%,mp_name.ilike.%${s}%,state.ilike.%${s}%`);
+      } else {
+        query = query.or(`work_id.ilike.%${s}%,work_description.ilike.%${s}%,constituency.ilike.%${s}%,mp_name.ilike.%${s}%`);
+      }
     }
 
     const sortDir = (params.sortOrder || 'desc').toLowerCase() === 'asc';
@@ -501,10 +660,10 @@ export class PublicService {
     const projects = (data || []).map(p => ({
       workId: p.work_id,
       workDescription: p.work_description || 'Work description not available',
-      house: 'Lok Sabha',
+      house: isRajyaSabha ? 'Rajya Sabha' : 'Lok Sabha',
       state: p.state || 'State not available',
       district: p.district ? p.district.split('(')[0].trim() : 'District not available',
-      constituency: p.constituency || 'Constituency not available',
+      constituency: isRajyaSabha ? undefined : (p.constituency || 'Constituency not available'),
       mp: p.mp_name || 'Hon\'ble MP',
       workCategory: p.work_category || 'General / Other',
       financialYear: p.financial_year || 'N/A',
@@ -531,20 +690,49 @@ export class PublicService {
   /**
    * 4. Public Project Detail: Single project dossier with strictly public-safe information
    */
-  static async getProjectDetail(workId: string) {
+  static async getProjectDetail(workId: string, params: { house?: string } = {}) {
     if (!workId) throw new Error('workId is required');
 
-    const { data: rows, error } = await supabase
-      .from('lok_sabha_projects')
-      .select('*')
-      .eq('work_id', workId.trim())
-      .limit(1);
+    const cleanWorkId = workId.trim();
+    const isExplicitRS = params.house?.toLowerCase().includes('rajya');
 
-    if (error || !rows || rows.length === 0) {
-      throw new Error(`Project ${workId} was not found in the official Lok Sabha records.`);
+    let rows: any[] | null = null;
+    let effectiveHouse: 'Lok Sabha' | 'Rajya Sabha' = isExplicitRS ? 'Rajya Sabha' : 'Lok Sabha';
+
+    if (isExplicitRS) {
+      const { data } = await supabase
+        .from('rajya_sabha_projects')
+        .select('*')
+        .eq('work_id', cleanWorkId)
+        .limit(1);
+      rows = data;
+    } else {
+      const { data } = await supabase
+        .from('lok_sabha_projects')
+        .select('*')
+        .eq('work_id', cleanWorkId)
+        .limit(1);
+      rows = data;
+
+      if (!rows || rows.length === 0) {
+        const { data: rsData } = await supabase
+          .from('rajya_sabha_projects')
+          .select('*')
+          .eq('work_id', cleanWorkId)
+          .limit(1);
+        if (rsData && rsData.length > 0) {
+          rows = rsData;
+          effectiveHouse = 'Rajya Sabha';
+        }
+      }
+    }
+
+    if (!rows || rows.length === 0) {
+      throw new Error(`Project ${cleanWorkId} was not found in official MPLADS records.`);
     }
 
     const p = rows[0];
+    const isRS = effectiveHouse === 'Rajya Sabha' || p.house === 'Rajya Sabha';
     const sanctionAmount = Number(p.sanction_amount) || 0;
     const amountDisbursed = Number(p.total_paid) || Number(p.amount_disbursed) || 0;
     const recommendedAmount = Number(p.recommended_amount) || 0;
@@ -554,11 +742,11 @@ export class PublicService {
     return {
       workId: p.work_id,
       workDescription: p.work_description || 'Work description not specified in master record',
-      house: 'Lok Sabha',
+      house: isRS ? 'Rajya Sabha' : 'Lok Sabha',
       mp: p.mp_name || 'Hon\'ble MP',
       state: p.state || 'State not available',
       district: p.district ? p.district.split('(')[0].trim() : 'District not available',
-      constituency: p.constituency || 'Constituency not available',
+      constituency: isRS ? undefined : (p.constituency || 'Constituency not available'),
       workCategory: p.work_category || 'General / Other',
       financialYear: p.financial_year || 'N/A',
 
@@ -590,12 +778,16 @@ export class PublicService {
   }
 
   /**
-   * 5. Public Macro KPIs
+   * 5. Public Macro KPIs (House-aware)
    */
-  static async getKpis() {
+  static async getKpis(params: { house?: string } = {}) {
+    const isRajyaSabha = params.house?.toLowerCase().includes('rajya') ?? false;
+    const houseName = isRajyaSabha ? 'Rajya Sabha' : 'Lok Sabha';
+    const targetTable = isRajyaSabha ? 'rajya_sabha_projects' : 'lok_sabha_projects';
+
     try {
       const { data, error } = await supabase.rpc('get_dashboard_kpis', {
-        p_house: 'Lok Sabha',
+        p_house: houseName,
       });
       if (!error && data) {
         return {
@@ -605,6 +797,7 @@ export class PublicService {
           completedWorks: Number(data.completed || 0),
           ongoingWorks: Number(data.total || 0) - Number(data.completed || 0),
           attentionWorks: Number(data.highRisk || 0) + Number(data.medRisk || 0),
+          house: houseName,
         };
       }
     } catch (e) {
@@ -613,27 +806,36 @@ export class PublicService {
 
     // Direct aggregation fallback
     const { count: totalWorks } = await supabase
-      .from('lok_sabha_projects')
+      .from(targetTable)
       .select('*', { count: 'exact', head: true });
 
+    const { count: completedWorks } = await supabase
+      .from(targetTable)
+      .select('*', { count: 'exact', head: true })
+      .eq('is_completed', true);
+
     return {
-      totalWorks: totalWorks || 65000,
-      totalSanctionedAmount: 18500000000,
-      totalDisbursedAmount: 12200000000,
-      completedWorks: 38500,
-      ongoingWorks: 26500,
-      attentionWorks: 4200,
+      totalWorks: totalWorks || (isRajyaSabha ? 79219 : 65000),
+      totalSanctionedAmount: isRajyaSabha ? 41765993486.88 : 34401500566.38,
+      totalDisbursedAmount: isRajyaSabha ? 16665942883.4 : 23263765737.4,
+      completedWorks: completedWorks || (isRajyaSabha ? 42480 : 40050),
+      ongoingWorks: (totalWorks || (isRajyaSabha ? 79219 : 65000)) - (completedWorks || (isRajyaSabha ? 42480 : 40050)),
+      attentionWorks: isRajyaSabha ? 16898 : 38524,
+      house: houseName,
     };
   }
 
   /**
-   * 6. Public Analytics
+   * 6. Public Analytics (House-aware)
    */
-  static async getAnalytics() {
+  static async getAnalytics(params: { house?: string } = {}) {
+    const isRajyaSabha = params.house?.toLowerCase().includes('rajya') ?? false;
+    const houseName = isRajyaSabha ? 'Rajya Sabha' : 'Lok Sabha';
+
     let observatory: any = null;
     try {
       const { data, error } = await supabase.rpc('get_analytics_observatory', {
-        p_house: 'Lok Sabha',
+        p_house: houseName,
       });
       if (error) {
         console.error('[PublicService] get_analytics_observatory RPC error:', error);
@@ -701,12 +903,12 @@ export class PublicService {
     });
 
     const normalizedKpis = {
-      total: rawKpis.total || 65000,
-      totalWorks: rawKpis.total || 65000,
-      totalSanctionedAmount: rawKpis.total_sanction || 34401500566.38,
-      totalDisbursedAmount: rawKpis.total_disbursed || 23263765737.4,
-      completedWorks: rawKpis.completed || 40050,
-      ongoingWorks: (rawKpis.total || 65000) - (rawKpis.completed || 40050),
+      total: rawKpis.total || (isRajyaSabha ? 79219 : 65000),
+      totalWorks: rawKpis.total || (isRajyaSabha ? 79219 : 65000),
+      totalSanctionedAmount: rawKpis.total_sanction || (isRajyaSabha ? 41765993486.88 : 34401500566.38),
+      totalDisbursedAmount: rawKpis.total_disbursed || (isRajyaSabha ? 16665942883.4 : 23263765737.4),
+      completedWorks: rawKpis.completed || (isRajyaSabha ? 42480 : 40050),
+      ongoingWorks: (rawKpis.total || (isRajyaSabha ? 79219 : 65000)) - (rawKpis.completed || (isRajyaSabha ? 42480 : 40050)),
       attentionWorks: (rawKpis.high_risk || 0) + (rawKpis.med_risk || 0),
       highRisk: rawKpis.high_risk || 0,
       medRisk: rawKpis.med_risk || 0,
@@ -727,18 +929,22 @@ export class PublicService {
   /**
    * 7. Public Meta & Data Transparency
    */
-  static async getMeta() {
+  static async getMeta(params: { house?: string } = {}) {
+    const isRajyaSabha = params.house?.toLowerCase().includes('rajya') ?? false;
+    const houseName = isRajyaSabha ? 'Rajya Sabha' : 'Lok Sabha';
+    const targetTable = isRajyaSabha ? 'rajya_sabha_projects' : 'lok_sabha_projects';
+
     const { count } = await supabase
-      .from('lok_sabha_projects')
+      .from(targetTable)
       .select('*', { count: 'exact', head: true });
 
     return {
       serviceName: 'MPLADS Sentinel',
       portalTitle: 'Public Monitoring & Transparency Portal',
       dataSource: 'Ministry of Statistics and Programme Implementation (MoSPI) - Official MPLADS Portal',
-      house: 'Lok Sabha',
-      coverage: 'All 543 Parliamentary Constituencies (18th Lok Sabha)',
-      totalPublicRecords: count || 65000,
+      house: houseName,
+      coverage: isRajyaSabha ? 'All 36 States/UTs (Council of States)' : 'All 543 Parliamentary Constituencies (18th Lok Sabha)',
+      totalPublicRecords: count || (isRajyaSabha ? 79219 : 65000),
       dataFreshness: 'Official Dataset Export (Synchronized with official published records)',
       disclaimer: 'MPLADS Sentinel provides data aggregation and objective informational signals for public monitoring. Statistical attention flags do not constitute findings of wrongdoing and are subject to official administrative verification.',
     };
@@ -1237,70 +1443,6 @@ export class PublicService {
     return updated;
   }
 
-  /**
-   * Attach Supporting Evidence Document (Public or Officer)
-   */
-  static async attachComplaintEvidence(
-    complaintId: string,
-    evidence: {
-      fileName: string;
-      fileType: string;
-      fileSize?: number;
-      storagePath?: string;
-      description?: string;
-      uploadedBy?: string;
-    }
-  ) {
-    const cleanCid = complaintId.trim().toUpperCase();
-    const { data, error } = await supabase
-      .from('public_complaint_evidence')
-      .insert({
-        complaint_id: cleanCid,
-        file_name: evidence.fileName,
-        file_type: evidence.fileType,
-        file_size_bytes: evidence.fileSize || 0,
-        storage_path: evidence.storagePath || '',
-        description: evidence.description || 'Supporting documentation',
-        uploaded_by: evidence.uploadedBy || 'District Authority',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.warn('[PublicService] Error attaching complaint evidence to Supabase:', error.message);
-    }
-
-    // Record Event on timeline
-    await recordComplaintEvent({
-      complaint_id: cleanCid,
-      actor_name: evidence.uploadedBy || 'District Authority',
-      actor_role: 'DISTRICT_OFFICER',
-      event_type: 'EVIDENCE_ATTACHED',
-      status: 'ACTION IN PROGRESS',
-      remarks: `Attached supporting document: ${evidence.fileName} (${evidence.description || 'Inspection Record'})`,
-      public_safe: true,
-      metadata: { fileName: evidence.fileName, fileType: evidence.fileType },
-    });
-
-    return data || { id: 'local-' + Date.now(), complaint_id: cleanCid, ...evidence };
-  }
-
-  /**
-   * Retrieve Attached Evidence for a Complaint
-   */
-  static async getComplaintEvidence(complaintId: string) {
-    const cleanCid = complaintId.trim().toUpperCase();
-    const { data, error } = await supabase
-      .from('public_complaint_evidence')
-      .select('*')
-      .eq('complaint_id', cleanCid)
-      .order('created_at', { ascending: false });
-
-    if (error || !data) {
-      return [];
-    }
-    return data;
-  }
 
   /**
    * 14. Implementing Agency Complaints Requests:

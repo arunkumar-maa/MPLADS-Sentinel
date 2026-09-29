@@ -88,7 +88,7 @@ export function AuditorCaseFileModal({ workId, house, onClose, onStatusUpdated }
                   id: ev.id,
                   fileName: ev.file_name || 'Agency Proof Document',
                   fileType: ev.file_type || 'image/jpeg',
-                  fileSize: ev.file_size || 0,
+                  fileSize: ev.file_size_bytes || (ev as any).file_size || 0,
                   storagePath: ev.storage_path || '',
                   description: ev.description || '',
                   uploadedBy: ev.uploaded_by || ev.agency_name || 'Implementing Agency',

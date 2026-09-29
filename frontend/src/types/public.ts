@@ -4,9 +4,9 @@ export interface PublicMpItem {
   name: string;
   fullName: string;
   party: string;
-  constituency: string;
+  constituency?: string | null;
   state: string;
-  house: 'Lok Sabha';
+  house: 'Lok Sabha' | 'Rajya Sabha';
   photoUrl: string | null;
 }
 
@@ -29,9 +29,9 @@ export interface PublicMpProfileResponse {
     fullName: string;
     mpName: string;
     party: string;
-    constituency: string;
+    constituency?: string | null;
     state: string;
-    house: 'Lok Sabha';
+    house: 'Lok Sabha' | 'Rajya Sabha';
     mpId: string;
     photoUrl: string | null;
     tenure: string;
@@ -85,10 +85,10 @@ export interface PublicMpProfileResponse {
 export interface PublicProjectItem {
   workId: string;
   workDescription: string;
-  house: 'Lok Sabha';
+  house: 'Lok Sabha' | 'Rajya Sabha';
   state: string;
   district: string;
-  constituency: string;
+  constituency?: string | null;
   mp: string;
   workCategory: string;
   financialYear: string;
@@ -114,11 +114,11 @@ export interface PublicProjectsResponse {
 export interface PublicProjectDetailResponse {
   workId: string;
   workDescription: string;
-  house: 'Lok Sabha';
+  house: 'Lok Sabha' | 'Rajya Sabha';
   mp: string;
   state: string;
   district: string;
-  constituency: string;
+  constituency?: string | null;
   workCategory: string;
   financialYear: string;
   financials: {
@@ -149,6 +149,7 @@ export interface PublicKpisResponse {
   completedWorks: number;
   ongoingWorks: number;
   attentionWorks: number;
+  house?: 'Lok Sabha' | 'Rajya Sabha';
 }
 
 export interface PublicMetaResponse {

@@ -107,12 +107,13 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Load KPIs once
+  // Load KPIs whenever selectedHouse changes
   useEffect(() => {
     async function loadKpis() {
       try {
         setKpisLoading(true);
-        const res = await PublicService.getKpis();
+        const houseQuery = selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha';
+        const res = await PublicService.getKpis({ house: houseQuery });
         setKpis(res);
       } catch (err) {
         console.error('[PublicDashboard] Error loading KPIs:', err);
@@ -121,9 +122,9 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
       }
     }
     loadKpis();
-  }, []);
+  }, [selectedHouse]);
 
-  // Fetch Projects Table when works tab or filters change
+  // Fetch Projects Table when works tab, house, or filters change
   useEffect(() => {
     if (activeTableTab !== 'WORKS') return;
 
@@ -132,7 +133,9 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
       try {
         setProjectsLoading(true);
         setProjectsError(null);
+        const houseQuery = selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha';
         const res = await PublicService.getProjects({
+          house: houseQuery,
           page: projectsPage,
           pageSize: projectsPageSize,
           search: debouncedSearch || undefined,
@@ -163,6 +166,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
     };
   }, [
     activeTableTab,
+    selectedHouse,
     projectsPage,
     projectsPageSize,
     debouncedSearch,
@@ -172,7 +176,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
     selectedFY,
   ]);
 
-  // Fetch MPs Table when MPs tab or filters change
+  // Fetch MPs Table when MPs tab, house, or filters change
   useEffect(() => {
     if (activeTableTab !== 'MPS') return;
 
@@ -181,7 +185,9 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
       try {
         setMpsLoading(true);
         setMpsError(null);
+        const houseQuery = selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha';
         const res = await PublicService.getMps({
+          house: houseQuery,
           page: mpsPage,
           pageSize: mpsPageSize,
           search: debouncedSearch || undefined,
@@ -207,7 +213,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
     return () => {
       isMounted = false;
     };
-  }, [activeTableTab, mpsPage, mpsPageSize, debouncedSearch, selectedState]);
+  }, [activeTableTab, selectedHouse, mpsPage, mpsPageSize, debouncedSearch, selectedState]);
 
   const hasActiveFilters =
     searchInput.trim() !== '' ||
@@ -244,7 +250,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-            Details of Lok Sabha MPLADS works and parliamentary project portfolios
+            Details of {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} MPLADS works and parliamentary project portfolios
           </p>
         </div>
 
@@ -255,7 +261,8 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
             <button
               onClick={() => {
                 setSelectedHouse('LOK_SABHA');
-                setHouseInfoNotice(false);
+                setProjectsPage(1);
+                setMpsPage(1);
               }}
               className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
                 selectedHouse === 'LOK_SABHA'
@@ -267,15 +274,17 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
             </button>
             <button
               onClick={() => {
-                setHouseInfoNotice(true);
+                setSelectedHouse('RAJYA_SABHA');
+                setProjectsPage(1);
+                setMpsPage(1);
               }}
-              className="px-3 py-1.5 rounded text-slate-500 hover:text-slate-800 transition-all flex items-center gap-1 cursor-pointer"
-              title="Rajya Sabha works are administered under official State Nodal records"
+              className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                selectedHouse === 'RAJYA_SABHA'
+                  ? 'bg-[#00204a] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <span>Rajya Sabha</span>
-              <span className="text-[9px] font-normal px-1 py-0.2 rounded bg-slate-200/80 text-slate-600">
-                Nodal
-              </span>
+              Rajya Sabha
             </button>
           </div>
 
@@ -299,21 +308,15 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
         </div>
       </div>
 
-      {/* House Selector Informative Notice (if Rajya Sabha clicked) */}
-      {houseInfoNotice && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs px-4 py-2.5 rounded-sm flex items-center justify-between gap-2 shadow-2xs animate-fade-in">
+      {/* Neutral Public Transparency Notice */}
+      {selectedHouse === 'RAJYA_SABHA' && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 text-xs px-4 py-2.5 rounded-sm flex items-center justify-between gap-2 shadow-2xs animate-fade-in">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
+            <ShieldCheck size={16} className="text-[#005eb2] flex-shrink-0" />
             <span>
-              <strong>Note:</strong> Public transparency monitoring actively publishes Lok Sabha parliamentary portfolios (543 seats). Rajya Sabha project records are administered through State Nodal monitoring.
+              Public transparency view provides read-only access to available Lok Sabha and Rajya Sabha MPLADS project information.
             </span>
           </div>
-          <button
-            onClick={() => setHouseInfoNotice(false)}
-            className="text-amber-700 hover:text-amber-900 p-0.5 cursor-pointer"
-          >
-            <X size={14} />
-          </button>
         </div>
       )}
 
@@ -602,7 +605,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
               className="text-base sm:text-lg font-bold text-slate-900 tracking-tight"
               style={{ fontFamily: 'Montserrat, sans-serif' }}
             >
-              Lok Sabha Representatives / MPLADS Works
+              {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} Representatives / MPLADS Works
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               {activeTableTab === 'WORKS'
@@ -642,7 +645,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                MPs (543)
+                {selectedHouse === 'RAJYA_SABHA' ? `MPs (${mpsTotalCount || 'RS'})` : 'MPs (543)'}
               </button>
             </div>
 
@@ -674,7 +677,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
               <div className="flex flex-col items-center justify-center min-h-[300px] text-center p-8">
                 <div className="w-8 h-8 border-3 border-[#005eb2] border-t-transparent rounded-full animate-spin mb-3" />
                 <p className="text-xs font-semibold text-slate-800">
-                  Loading verified Lok Sabha works...
+                  Loading verified {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} works...
                 </p>
                 <p className="text-[11px] text-slate-500">
                   Retrieving official database records
@@ -713,7 +716,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                     <tr>
                       <th className="py-3 px-3.5 w-12 text-center">Sr.</th>
                       <th className="py-3 px-3.5 min-w-[220px]">Work ID & Details</th>
-                      <th className="py-3 px-3.5 min-w-[140px]">Constituency / State</th>
+                      <th className="py-3 px-3.5 min-w-[140px]">{selectedHouse === 'RAJYA_SABHA' ? 'State' : 'Constituency / State'}</th>
                       <th className="py-3 px-3.5 min-w-[140px]">Hon'ble MP</th>
                       <th className="py-3 px-3.5 min-w-[130px]">Category & FY</th>
                       <th className="py-3 px-3.5 text-right min-w-[120px]">Sanction Amount</th>
@@ -726,7 +729,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                       const srNo = (projectsPage - 1) * projectsPageSize + idx + 1;
                       return (
                         <tr
-                          key={p.workId}
+                           key={p.workId}
                           className="hover:bg-slate-50/80 transition-colors"
                         >
                           <td className="py-3 px-3.5 text-center font-mono text-slate-400 text-[11px]">
@@ -750,9 +753,11 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                             )}
                           </td>
                           <td className="py-3 px-3.5 whitespace-nowrap">
-                            <div className="font-medium text-slate-900">
-                              {p.constituency}
-                            </div>
+                            {p.constituency ? (
+                              <div className="font-medium text-slate-900">
+                                {p.constituency}
+                              </div>
+                            ) : null}
                             <div className="text-[11px] text-slate-500">{p.state}</div>
                           </td>
                           <td className="py-3 px-3.5 whitespace-nowrap">
@@ -850,10 +855,10 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
               <div className="flex flex-col items-center justify-center min-h-[300px] text-center p-8">
                 <div className="w-8 h-8 border-3 border-[#005eb2] border-t-transparent rounded-full animate-spin mb-3" />
                 <p className="text-xs font-semibold text-slate-800">
-                  Loading parliamentary representatives...
+                  Loading {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'parliamentary'} representatives...
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Fetching 543 Lok Sabha members
+                  Fetching {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : '543 Lok Sabha'} members
                 </p>
               </div>
             ) : mpsError ? (
@@ -889,7 +894,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                     <tr>
                       <th className="py-3 px-3.5 w-12 text-center">Sr.</th>
                       <th className="py-3 px-3.5 min-w-[200px]">Representative</th>
-                      <th className="py-3 px-3.5 min-w-[140px]">Constituency</th>
+                      <th className="py-3 px-3.5 min-w-[140px]">{selectedHouse === 'RAJYA_SABHA' ? 'Representation' : 'Constituency'}</th>
                       <th className="py-3 px-3.5 min-w-[140px]">State</th>
                       <th className="py-3 px-3.5 min-w-[120px]">Party / House</th>
                       <th className="py-3 px-3.5 text-center min-w-[100px]">Action</th>
@@ -926,7 +931,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                             </div>
                           </td>
                           <td className="py-3 px-3.5 font-medium text-slate-800 whitespace-nowrap">
-                            {mp.constituency}
+                            {mp.constituency || 'Rajya Sabha'}
                           </td>
                           <td className="py-3 px-3.5 text-slate-600 whitespace-nowrap">
                             {mp.state}
@@ -936,7 +941,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
                               {mp.party || 'Independent'}
                             </span>
                             <span className="text-[10px] text-[#005eb2] font-medium">
-                              Lok Sabha
+                              {mp.house || (selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha')}
                             </span>
                           </td>
                           <td className="py-3 px-3.5 text-center whitespace-nowrap">
@@ -1002,18 +1007,18 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
 
       {/* ── 5. Quick Access Navigation Cards ──────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 1: Explore All 543 MPs */}
+        {/* Card 1: Explore All MPs */}
         <div
-          onClick={() => onNavigate('/mps')}
+          onClick={() => onNavigate(`/mps?house=${selectedHouse === 'RAJYA_SABHA' ? 'Rajya+Sabha' : 'Lok+Sabha'}`)}
           className="bg-white border border-slate-200 rounded-sm p-4 hover:border-[#005eb2] hover:shadow-xs transition-all cursor-pointer group flex items-start justify-between gap-3"
         >
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 group-hover:text-[#005eb2] transition-colors">
               <Users size={16} className="text-[#005eb2]" />
-              <span>543 Lok Sabha MPs</span>
+              <span>{selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha MPs Directory' : '543 Lok Sabha MPs'}</span>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Browse representatives, profiles, constituency allocations, and works.
+              Browse representatives, profiles, {selectedHouse === 'RAJYA_SABHA' ? 'state allocations' : 'constituency allocations'}, and works.
             </p>
           </div>
           <ChevronRight size={16} className="text-slate-400 group-hover:text-[#005eb2] group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-0.5" />
@@ -1021,7 +1026,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
 
         {/* Card 2: Project Explorer */}
         <div
-          onClick={() => onNavigate('/projects')}
+          onClick={() => onNavigate(`/projects?house=${selectedHouse === 'RAJYA_SABHA' ? 'Rajya+Sabha' : 'Lok+Sabha'}`)}
           className="bg-white border border-slate-200 rounded-sm p-4 hover:border-[#005eb2] hover:shadow-xs transition-all cursor-pointer group flex items-start justify-between gap-3"
         >
           <div className="space-y-1">
@@ -1030,7 +1035,7 @@ export function PublicHomePage({ onNavigate }: PublicHomePageProps) {
               <span>Full Project Explorer</span>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Explore 65,000+ works with multi-factor filters and inspection records.
+              Explore {selectedHouse === 'RAJYA_SABHA' ? '79,000+ Rajya Sabha works' : '65,000+ Lok Sabha works'} with multi-factor filters.
             </p>
           </div>
           <ChevronRight size={16} className="text-slate-400 group-hover:text-[#005eb2] group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-0.5" />

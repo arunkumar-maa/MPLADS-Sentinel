@@ -24,6 +24,12 @@ interface PublicProjectExplorerProps {
 }
 
 export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps) {
+  const [selectedHouse, setSelectedHouse] = useState<'LOK_SABHA' | 'RAJYA_SABHA'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const h = params.get('house');
+    return h && h.toLowerCase().includes('rajya') ? 'RAJYA_SABHA' : 'LOK_SABHA';
+  });
+
   const [projects, setProjects] = useState<PublicProjectItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -31,7 +37,10 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
   const [pageSize] = useState(25);
 
   // Filters
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mpName') || params.get('search') || '';
+  });
   const [state, setState] = useState('ALL');
   const [district, setDistrict] = useState('ALL');
   const [status, setStatus] = useState('ALL');
@@ -75,7 +84,9 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
       try {
         setLoading(true);
         setError(null);
+        const houseQuery = selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha';
         const res = await PublicService.getProjects({
+          house: houseQuery,
           page,
           pageSize,
           search: search.trim() || undefined,
@@ -99,7 +110,7 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
       }
     }
     loadProjects();
-  }, [page, state, status, category, financialYear, sortBy, sortOrder, search]);
+  }, [selectedHouse, page, state, status, category, financialYear, sortBy, sortOrder, search]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +143,7 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
             className="text-2xl font-bold text-[#000a1f]"
             style={{ fontFamily: 'Montserrat, sans-serif' }}
           >
-            Lok Sabha MPLADS Projects
+            {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha MPLADS Projects' : 'Lok Sabha MPLADS Projects'}
           </h1>
           <p className="text-xs text-[#747780] mt-0.5">
             Search and inspect sanctioned public works, expenditure progress, and execution milestones.
@@ -140,8 +151,38 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
         </div>
 
         <div className="flex items-center gap-3">
+          {/* House Selector */}
+          <div className="inline-flex items-center rounded border border-slate-300 bg-slate-100/80 p-0.5 text-xs font-semibold shadow-2xs">
+            <button
+              onClick={() => {
+                setSelectedHouse('LOK_SABHA');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                selectedHouse === 'LOK_SABHA'
+                  ? 'bg-[#00204a] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Lok Sabha
+            </button>
+            <button
+              onClick={() => {
+                setSelectedHouse('RAJYA_SABHA');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                selectedHouse === 'RAJYA_SABHA'
+                  ? 'bg-[#00204a] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Rajya Sabha
+            </button>
+          </div>
+
           <div className="px-3 py-1.5 rounded-sm bg-[#e6eff8] border border-[#d2dbe4] text-xs font-semibold text-[#00204a]">
-            {totalCount.toLocaleString('en-IN')} Works Found
+            {totalCount.toLocaleString('en-IN')} {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} Works
           </div>
         </div>
       </div>
@@ -263,7 +304,9 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
       {loading ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] text-center">
           <div className="w-9 h-9 border-3 border-[#005eb2] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-xs font-semibold text-[#000a1f]">Loading Lok Sabha Works…</p>
+          <p className="text-xs font-semibold text-[#000a1f]">
+            Loading {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} Works…
+          </p>
           <p className="text-[11px] text-[#747780]">Running server-side filtered database query</p>
         </div>
       ) : error ? (
@@ -283,7 +326,7 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
           <FolderGit2 size={36} className="text-[#747780] mx-auto opacity-50" />
           <h3 className="text-sm font-bold text-[#000a1f]">No Projects Matched</h3>
           <p className="text-xs text-[#747780]">
-            No public works found matching your filter criteria.
+            No {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} public works found matching your filter criteria.
           </p>
           <button
             onClick={handleReset}
@@ -300,7 +343,7 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
                 <thead className="bg-[#f8f9fa] border-b border-[#E9ECEF] text-[10px] font-bold uppercase text-[#747780]">
                   <tr>
                     <th className="py-3 px-3.5">Work ID & Description</th>
-                    <th className="py-3 px-3.5">Constituency / State</th>
+                    <th className="py-3 px-3.5">{selectedHouse === 'RAJYA_SABHA' ? 'State' : 'Constituency / State'}</th>
                     <th className="py-3 px-3.5">Hon'ble MP</th>
                     <th className="py-3 px-3.5">Category</th>
                     <th className="py-3 px-3.5 text-right">Sanction Amount</th>
@@ -326,7 +369,9 @@ export function PublicProjectExplorer({ onNavigate }: PublicProjectExplorerProps
                         )}
                       </td>
                       <td className="py-3 px-3.5 whitespace-nowrap">
-                        <div className="font-medium text-[#141d23]">{p.constituency}</div>
+                        {p.constituency ? (
+                          <div className="font-medium text-[#141d23]">{p.constituency}</div>
+                        ) : null}
                         <div className="text-[11px] text-[#747780]">{p.state}</div>
                       </td>
                       <td className="py-3 px-3.5 whitespace-nowrap font-medium text-[#44474f]">

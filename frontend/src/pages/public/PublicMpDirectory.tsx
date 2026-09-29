@@ -20,6 +20,12 @@ interface PublicMpDirectoryProps {
 }
 
 export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
+  const [selectedHouse, setSelectedHouse] = useState<'LOK_SABHA' | 'RAJYA_SABHA'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const h = params.get('house');
+    return h && h.toLowerCase().includes('rajya') ? 'RAJYA_SABHA' : 'LOK_SABHA';
+  });
+
   const [mps, setMps] = useState<PublicMpItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -33,13 +39,15 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch MPs when page, search or state changes
+  // Fetch MPs when house, page, search or state changes
   useEffect(() => {
     async function loadMps() {
       try {
         setLoading(true);
         setError(null);
+        const houseQuery = selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha';
         const res = await PublicService.getMps({
+          house: houseQuery,
           page,
           pageSize,
           search: search.trim() || undefined,
@@ -56,30 +64,22 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
       }
     }
     loadMps();
-  }, [page, selectedState, search]);
+  }, [selectedHouse, page, selectedState, search]);
 
   // Fetch unique states for filter on mount
   useEffect(() => {
     async function loadFilterStates() {
       try {
-        const res = await PublicService.getMps({ page: 1, pageSize: 100 });
-        if (res?.mps) {
-          const statesSet = new Set<string>();
-          res.mps.forEach(m => {
-            if (m.state) statesSet.add(m.state);
-          });
-          // Also fetch next pages or complete states
-          const standardStates = [
-            'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-            'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
-            'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
-            'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
-            'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-            'Andaman And Nicobar Islands', 'Chandigarh', 'Dadra And Nagar Haveli And Daman And Diu',
-            'Delhi', 'Jammu And Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
-          ];
-          setAvailableStates(standardStates.sort());
-        }
+        const standardStates = [
+          'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+          'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+          'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+          'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+          'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+          'Andaman And Nicobar Islands', 'Chandigarh', 'Dadra And Nagar Haveli And Daman And Diu',
+          'Delhi', 'Jammu And Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+        ];
+        setAvailableStates(standardStates.sort());
       } catch (e) {}
     }
     loadFilterStates();
@@ -104,16 +104,48 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
             className="text-2xl font-bold text-[#000a1f]"
             style={{ fontFamily: 'Montserrat, sans-serif' }}
           >
-            Lok Sabha Members of Parliament
+            {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha Members of Parliament' : 'Lok Sabha Members of Parliament'}
           </h1>
           <p className="text-xs text-[#747780] mt-0.5">
-            Dataset-driven directory of all 543 Lok Sabha representatives and their MPLADS works portfolio.
+            {selectedHouse === 'RAJYA_SABHA'
+              ? 'Dataset-driven directory of Rajya Sabha representatives and their MPLADS works portfolio.'
+              : 'Dataset-driven directory of all 543 Lok Sabha representatives and their MPLADS works portfolio.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* House Selector */}
+          <div className="inline-flex items-center rounded border border-slate-300 bg-slate-100/80 p-0.5 text-xs font-semibold shadow-2xs">
+            <button
+              onClick={() => {
+                setSelectedHouse('LOK_SABHA');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                selectedHouse === 'LOK_SABHA'
+                  ? 'bg-[#00204a] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Lok Sabha
+            </button>
+            <button
+              onClick={() => {
+                setSelectedHouse('RAJYA_SABHA');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                selectedHouse === 'RAJYA_SABHA'
+                  ? 'bg-[#00204a] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Rajya Sabha
+            </button>
+          </div>
+
           <div className="px-3 py-1.5 rounded-sm bg-[#e6eff8] border border-[#d2dbe4] text-xs font-semibold text-[#00204a]">
-            {totalCount > 0 ? `${totalCount} MPs Found` : '543 Lok Sabha Constituencies'}
+            {totalCount > 0 ? `${totalCount} MPs Found` : (selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha Members' : '543 Lok Sabha Constituencies')}
           </div>
         </div>
       </div>
@@ -170,7 +202,9 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
       {loading ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] text-center">
           <div className="w-9 h-9 border-3 border-[#005eb2] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-xs font-semibold text-[#000a1f]">Loading Lok Sabha Representatives…</p>
+          <p className="text-xs font-semibold text-[#000a1f]">
+            Loading {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} Representatives…
+          </p>
           <p className="text-[11px] text-[#747780]">Connecting to official parliamentary directory records</p>
         </div>
       ) : error ? (
@@ -191,7 +225,7 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
           <Users size={36} className="text-[#747780] mx-auto opacity-50" />
           <h3 className="text-sm font-bold text-[#000a1f]">No Representatives Found</h3>
           <p className="text-xs text-[#747780]">
-            No Lok Sabha MP records matched your search query or state filter.
+            No {selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha'} MP records matched your search query or state filter.
           </p>
           <button
             onClick={() => {
@@ -227,22 +261,27 @@ export function PublicMpDirectory({ onNavigate }: PublicMpDirectoryProps) {
                         {mp.name}
                       </h3>
                       <div className="mt-1 space-y-0.5 text-[11px] text-[#747780]">
+                        {mp.constituency ? (
+                          <div className="flex items-center gap-1">
+                            <MapPin size={12} className="text-[#747780] flex-shrink-0" />
+                            <span className="font-semibold text-[#141d23] truncate">{mp.constituency}</span>
+                          </div>
+                        ) : null}
                         <div className="flex items-center gap-1">
-                          <MapPin size={12} className="text-[#747780] flex-shrink-0" />
-                          <span className="font-semibold text-[#141d23] truncate">{mp.constituency}</span>
+                          {!mp.constituency && <MapPin size={12} className="text-[#747780] flex-shrink-0" />}
+                          <p className={`truncate ${mp.constituency ? 'pl-4' : 'font-semibold text-[#141d23]'}`}>{mp.state}</p>
                         </div>
-                        <p className="truncate pl-4">{mp.state}</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="pt-2 border-t border-[#E9ECEF] flex items-center justify-between text-[11px]">
                     <span className="text-[#747780]">Party:</span>
-                    <span className="text-[#44474f] font-medium">{mp.party}</span>
+                    <span className="text-[#44474f] font-medium">{mp.party || 'Independent'}</span>
                   </div>
                   <div className="pt-1 flex items-center justify-between text-[11px]">
                     <span className="text-[#747780]">House:</span>
-                    <span className="text-[#005eb2] font-semibold">{mp.house}</span>
+                    <span className="text-[#005eb2] font-semibold">{mp.house || (selectedHouse === 'RAJYA_SABHA' ? 'Rajya Sabha' : 'Lok Sabha')}</span>
                   </div>
                 </div>
 

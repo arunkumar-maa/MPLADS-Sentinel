@@ -16,7 +16,7 @@ export async function getPublicMpProfile(req: Request, res: Response) {
     if (!mpId) {
       return res.status(400).json({ success: false, message: 'MP identifier is required' });
     }
-    const result = await PublicService.getMpProfile(mpId);
+    const result = await PublicService.getMpProfile(mpId, req.query);
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(404).json({ success: false, message: error.message });
@@ -38,7 +38,7 @@ export async function getPublicProjectDetail(req: Request, res: Response) {
     if (!workId) {
       return res.status(400).json({ success: false, message: 'workId parameter is required' });
     }
-    const result = await PublicService.getProjectDetail(workId);
+    const result = await PublicService.getProjectDetail(workId, req.query);
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(404).json({ success: false, message: error.message });
@@ -47,7 +47,7 @@ export async function getPublicProjectDetail(req: Request, res: Response) {
 
 export async function getPublicKpis(req: Request, res: Response) {
   try {
-    const result = await PublicService.getKpis();
+    const result = await PublicService.getKpis(req.query);
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -56,7 +56,7 @@ export async function getPublicKpis(req: Request, res: Response) {
 
 export async function getPublicAnalytics(req: Request, res: Response) {
   try {
-    const result = await PublicService.getAnalytics();
+    const result = await PublicService.getAnalytics(req.query);
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -65,7 +65,7 @@ export async function getPublicAnalytics(req: Request, res: Response) {
 
 export async function getPublicMeta(req: Request, res: Response) {
   try {
-    const result = await PublicService.getMeta();
+    const result = await PublicService.getMeta(req.query);
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });

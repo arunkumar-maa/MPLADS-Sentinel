@@ -55,7 +55,7 @@ export function PublicMpProfile({ mpId, onNavigate }: PublicMpProfileProps) {
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
         <div className="w-10 h-10 border-3 border-[#005eb2] border-t-transparent rounded-full animate-spin mb-3" />
         <h3 className="text-sm font-bold text-[#000a1f]">Loading Representative Dossier…</h3>
-        <p className="text-xs text-[#747780]">Aggregating verified Lok Sabha portfolio and public works records</p>
+        <p className="text-xs text-[#747780]">Aggregating verified parliamentary portfolio and public works records</p>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function PublicMpProfile({ mpId, onNavigate }: PublicMpProfileProps) {
           Representative Profile Not Found
         </h2>
         <p className="text-xs text-[#44474f]">
-          {error || 'Unable to locate official Lok Sabha profile for the requested identifier.'}
+          {error || 'Unable to locate official profile for the requested identifier.'}
         </p>
         <button
           onClick={() => onNavigate('/mps')}
@@ -114,7 +114,7 @@ export function PublicMpProfile({ mpId, onNavigate }: PublicMpProfileProps) {
           <div className="flex-1 text-center sm:text-left space-y-2">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#005eb2]/10 text-[#005eb2] text-[10px] font-bold uppercase tracking-wider">
               <Landmark size={12} />
-              <span>House of the People · Lok Sabha</span>
+              <span>{mpInfo.house === 'Rajya Sabha' ? 'Council of States · Rajya Sabha' : 'House of the People · Lok Sabha'}</span>
             </div>
 
             <h1
@@ -125,29 +125,51 @@ export function PublicMpProfile({ mpId, onNavigate }: PublicMpProfileProps) {
             </h1>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-[#44474f]">
+              {mpInfo.constituency ? (
+                <>
+                  <div className="flex items-center gap-1">
+                    <MapPin size={14} className="text-[#005eb2]" />
+                    <span className="font-semibold text-[#000a1f]">{mpInfo.constituency}</span>
+                  </div>
+                  <span>•</span>
+                </>
+              ) : null}
               <div className="flex items-center gap-1">
                 <MapPin size={14} className="text-[#005eb2]" />
-                <span className="font-semibold text-[#000a1f]">{mpInfo.constituency}</span>
+                <span className="font-semibold text-[#000a1f]">{mpInfo.state}</span>
               </div>
-              <span>•</span>
-              <span>{mpInfo.state}</span>
-              <span>•</span>
-              <div className="flex items-center gap-1">
-                <Calendar size={13} className="text-[#747780]" />
-                <span>{mpInfo.tenure}</span>
-              </div>
+              {mpInfo.tenure ? (
+                <>
+                  <span>•</span>
+                  <div className="flex items-center gap-1">
+                    <Calendar size={13} className="text-[#747780]" />
+                    <span>{mpInfo.tenure}</span>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             {/* Factual public metadata */}
             <div className="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs">
               <div className="bg-[#f8f9fa] border border-[#E9ECEF] px-2.5 py-1 rounded-sm text-[11px]">
                 <span className="text-[#747780]">Party Affiliation: </span>
-                <strong className="text-[#141d23]">{mpInfo.party}</strong>
+                <strong className="text-[#141d23]">{mpInfo.party || 'Independent'}</strong>
               </div>
               <div className="bg-[#f8f9fa] border border-[#E9ECEF] px-2.5 py-1 rounded-sm text-[11px]">
-                <span className="text-[#747780]">Constituency: </span>
-                <strong className="text-[#141d23]">{mpInfo.constituency} ({mpInfo.state})</strong>
+                <span className="text-[#747780]">House: </span>
+                <strong className="text-[#141d23]">{mpInfo.house || 'Lok Sabha'}</strong>
               </div>
+              {mpInfo.constituency ? (
+                <div className="bg-[#f8f9fa] border border-[#E9ECEF] px-2.5 py-1 rounded-sm text-[11px]">
+                  <span className="text-[#747780]">Constituency: </span>
+                  <strong className="text-[#141d23]">{mpInfo.constituency} ({mpInfo.state})</strong>
+                </div>
+              ) : (
+                <div className="bg-[#f8f9fa] border border-[#E9ECEF] px-2.5 py-1 rounded-sm text-[11px]">
+                  <span className="text-[#747780]">Representation: </span>
+                  <strong className="text-[#141d23]">{mpInfo.state}</strong>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -346,11 +368,11 @@ export function PublicMpProfile({ mpId, onNavigate }: PublicMpProfileProps) {
               Recent Parliamentary Works
             </h3>
             <p className="text-[11px] text-[#747780]">
-              Latest sanctioned works under {mpInfo.mpName}'s constituency allocation
+              Latest sanctioned works under {mpInfo.mpName}'s {mpInfo.house === 'Rajya Sabha' ? 'parliamentary allocation' : 'constituency allocation'}
             </p>
           </div>
           <button
-            onClick={() => onNavigate(`/projects?mpName=${encodeURIComponent(mpInfo.mpName)}`)}
+            onClick={() => onNavigate(`/projects?mpName=${encodeURIComponent(mpInfo.mpName)}&house=${encodeURIComponent(mpInfo.house || 'Lok Sabha')}`)}
             className="text-xs font-semibold text-[#005eb2] hover:underline cursor-pointer"
           >
             Explore All MP Works →

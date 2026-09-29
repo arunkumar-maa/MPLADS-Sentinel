@@ -28,6 +28,7 @@ export class PublicService {
     search?: string;
     state?: string;
     constituency?: string;
+    house?: string;
   } = {}): Promise<PublicMpsResponse> {
     const q = new URLSearchParams();
     if (params.page) q.set('page', String(params.page));
@@ -35,6 +36,7 @@ export class PublicService {
     if (params.search) q.set('search', params.search);
     if (params.state && params.state !== 'ALL') q.set('state', params.state);
     if (params.constituency && params.constituency !== 'ALL') q.set('constituency', params.constituency);
+    if (params.house) q.set('house', params.house);
 
     const res = await fetch(`${API_BASE}/mps?${q.toString()}`);
     if (!res.ok) {
@@ -48,8 +50,11 @@ export class PublicService {
   /**
    * Fetch individual public MP profile dossier
    */
-  static async getMpProfile(mpId: string): Promise<PublicMpProfileResponse> {
-    const res = await fetch(`${API_BASE}/mps/${encodeURIComponent(mpId)}`);
+  static async getMpProfile(mpId: string, params: { house?: string } = {}): Promise<PublicMpProfileResponse> {
+    const q = new URLSearchParams();
+    if (params.house) q.set('house', params.house);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await fetch(`${API_BASE}/mps/${encodeURIComponent(mpId)}${qs}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Failed to load MP profile');
@@ -64,6 +69,7 @@ export class PublicService {
   static async getProjects(params: {
     page?: number;
     pageSize?: number;
+    house?: string;
     state?: string;
     district?: string;
     constituency?: string;
@@ -78,6 +84,7 @@ export class PublicService {
     const q = new URLSearchParams();
     if (params.page) q.set('page', String(params.page));
     if (params.pageSize) q.set('pageSize', String(params.pageSize));
+    if (params.house) q.set('house', params.house);
     if (params.state && params.state !== 'ALL') q.set('state', params.state);
     if (params.district && params.district !== 'ALL') q.set('district', params.district);
     if (params.constituency && params.constituency !== 'ALL') q.set('constituency', params.constituency);
@@ -101,8 +108,11 @@ export class PublicService {
   /**
    * Fetch individual public project detail dossier
    */
-  static async getProjectDetail(workId: string): Promise<PublicProjectDetailResponse> {
-    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(workId)}`);
+  static async getProjectDetail(workId: string, params: { house?: string } = {}): Promise<PublicProjectDetailResponse> {
+    const q = new URLSearchParams();
+    if (params.house) q.set('house', params.house);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(workId)}${qs}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || `Failed to fetch project detail for ${workId}`);
@@ -114,8 +124,11 @@ export class PublicService {
   /**
    * Fetch public macro KPIs
    */
-  static async getKpis(): Promise<PublicKpisResponse> {
-    const res = await fetch(`${API_BASE}/kpis`);
+  static async getKpis(params: { house?: string } = {}): Promise<PublicKpisResponse> {
+    const q = new URLSearchParams();
+    if (params.house) q.set('house', params.house);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await fetch(`${API_BASE}/kpis${qs}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Failed to load macro KPIs');
