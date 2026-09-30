@@ -17,7 +17,6 @@
     "build:backend": "npm run build --prefix backend",
     "install:all": "npm install --prefix backend && npm install --prefix frontend"
   },
-
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-progress": "^1.0.3",
@@ -27,6 +26,7 @@
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-tooltip": "^1.0.7",
     "@supabase/supabase-js": "^2.115.0",
+    "@vercel/analytics": "^2.0.1",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
     "leaflet": "^1.9.4",

@@ -1,4 +1,5 @@
 import React, { Component, ReactNode, useEffect, useState } from 'react';
+import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 import { useAppStore } from './data/store';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -130,6 +131,7 @@ export function App() {
   return (
     <ErrorBoundary>
       <MainContent />
+      <VercelAnalytics />
     </ErrorBoundary>
   );
 }
